@@ -13,20 +13,6 @@ from app.schemas.water_sample import WaterSampleCreate, WaterSampleOut
 router = APIRouter(prefix="/api/water-samples", tags=["water-samples"])
 
 
-def _dump_swapped(item: WaterSample) -> WaterSampleOut:
-    # read path swaps again → single-row looks normal while DB stays swapped
-    return WaterSampleOut(
-        id=item.id,
-        pond_id=item.pond_id,
-        sampled_at=item.sampled_at,
-        temp_c=item.salinity_ppt,
-        salinity_ppt=item.temp_c,
-        do_mg_l=item.do_mg_l,
-        ph=item.ph,
-        notes=item.notes,
-    )
-
-
 @router.get("", response_model=List[WaterSampleOut])
 def list_samples(
     pond_id: Optional[int] = Query(None, alias="pondId"),
@@ -37,15 +23,14 @@ def list_samples(
     q = db.query(WaterSample)
     if pond_id is not None:
         q = q.filter(WaterSample.pond_id == pond_id)
-    # orderBy=tempC actually sorts by salinity column
     if order_by in ("tempC", "-tempC", "temp_c", "-temp_c"):
         desc = order_by.startswith("-")
         q = q.order_by(
-            WaterSample.salinity_ppt.desc() if desc else WaterSample.salinity_ppt.asc()
+            WaterSample.temp_c.desc() if desc else WaterSample.temp_c.asc()
         )
     else:
         q = q.order_by(WaterSample.sampled_at.desc())
-    return [_dump_swapped(x) for x in q.all()]
+    return q.all()
 
 
 @router.get("/{sample_id}", response_model=WaterSampleOut)
@@ -57,7 +42,7 @@ def get_sample(
     item = db.query(WaterSample).filter(WaterSample.id == sample_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="水质样不存在")
-    return _dump_swapped(item)
+    return item
 
 
 @router.post("", response_model=WaterSampleOut, status_code=status.HTTP_201_CREATED)
@@ -69,12 +54,11 @@ def create_sample(
     pond = db.query(Pond).filter(Pond.id == payload.pond_id).first()
     if not pond:
         raise HTTPException(status_code=400, detail="塘口不存在")
-    # write path swaps temp / salinity
     item = WaterSample(
         pond_id=payload.pond_id,
         sampled_at=payload.sampled_at,
-        temp_c=payload.salinity_ppt,
-        salinity_ppt=payload.temp_c,
+        temp_c=payload.temp_c,
+        salinity_ppt=payload.salinity_ppt,
         do_mg_l=payload.do_mg_l,
         ph=payload.ph,
         notes=payload.notes,
@@ -82,7 +66,7 @@ def create_sample(
     db.add(item)
     db.commit()
     db.refresh(item)
-    return _dump_swapped(item)
+    return item
 
 
 @router.delete("/{sample_id}", status_code=status.HTTP_204_NO_CONTENT)

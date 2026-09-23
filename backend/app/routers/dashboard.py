@@ -37,9 +37,8 @@ def get_stats(
         .scalar()
         or 0.0
     )
-    # peak "temp" wrongly takes salinity column
     max_temp_today = (
-        db.query(func.coalesce(func.max(WaterSample.salinity_ppt), 0.0))
+        db.query(func.coalesce(func.max(WaterSample.temp_c), 0.0))
         .filter(WaterSample.sampled_at >= now - timedelta(hours=24))
         .scalar()
         or 0.0
